@@ -70,6 +70,20 @@
             <q-card-section>
               <div class="text-h6 q-mb-md">圖片預覽</div>
 
+              <!-- 畫筆大小控制 -->
+              <div v-if="selectedImage" class="q-mb-md">
+                <q-slider
+                  v-model="brushSize"
+                  :min="5"
+                  :max="50"
+                  :step="1"
+                  label
+                  :label-value="`畫筆大小: ${brushSize}px`"
+                  color="primary"
+                  class="q-mb-sm"
+                />
+              </div>
+
               <!-- 圖片預覽區域 -->
               <div class="preview-area">
                 <div v-if="!selectedImage" class="no-image">
@@ -79,17 +93,28 @@
                   </div>
                 </div>
 
-                <img
-                  v-else
-                  :src="selectedImage"
-                  alt="預覽圖片"
-                  class="preview-image"
-                />
+                <div v-else class="canvas-container">
+                  <canvas
+                    ref="canvas"
+                    class="drawing-canvas"
+                    @mousedown="startDrawing"
+                    @mousemove="draw"
+                    @mouseup="stopDrawing"
+                    @mouseleave="stopDrawing"
+                  />
+                </div>
               </div>
             </q-card-section>
 
             <!-- 操作按鈕 -->
             <q-card-actions v-if="selectedImage" align="right">
+              <q-btn
+                flat
+                color="secondary"
+                icon="undo"
+                label="重置遮罩"
+                @click="resetCanvas"
+              />
               <q-btn
                 flat
                 color="negative"
@@ -112,10 +137,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
 
 const activeTab = ref('repair');
 const selectedImage = ref<string | null>(null);
+const canvas = ref<HTMLCanvasElement | null>(null);
+const isDrawing = ref(false);
+const brushSize = ref(20);
+
+let ctx: CanvasRenderingContext2D | null = null;
 
 const openSettings = () => {
   // 開啟設定對話框
@@ -132,6 +162,9 @@ const selectImage = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         selectedImage.value = e.target?.result as string;
+        nextTick(() => {
+          setupCanvas();
+        });
       };
       reader.readAsDataURL(file);
     }
@@ -147,14 +180,84 @@ const handleDrop = (event: DragEvent) => {
       const reader = new FileReader();
       reader.onload = (e) => {
         selectedImage.value = e.target?.result as string;
+        nextTick(() => {
+          setupCanvas();
+        });
       };
       reader.readAsDataURL(file);
     }
   }
 };
 
+const setupCanvas = () => {
+  if (!canvas.value || !selectedImage.value) return;
+
+  const img = new Image();
+  img.onload = () => {
+    const canvasEl = canvas.value!;
+    ctx = canvasEl.getContext('2d')!;
+
+    // 設定 canvas 尺寸
+    const containerWidth = canvasEl.parentElement!.clientWidth;
+    const scale = Math.min(containerWidth / img.width, 400 / img.height);
+
+    canvasEl.width = img.width * scale;
+    canvasEl.height = img.height * scale;
+
+    // 繪製圖片
+    ctx.drawImage(img, 0, 0, canvasEl.width, canvasEl.height);
+  };
+  img.src = selectedImage.value;
+};
+
+const startDrawing = (event: MouseEvent) => {
+  if (!ctx) return;
+
+  isDrawing.value = true;
+
+  // 設定透明畫筆
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.lineWidth = brushSize.value;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  const rect = canvas.value!.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+};
+
+const draw = (event: MouseEvent) => {
+  if (!isDrawing.value || !ctx) return;
+
+  const rect = canvas.value!.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+
+  ctx.lineTo(x, y);
+  ctx.stroke();
+};
+
+const stopDrawing = () => {
+  if (!isDrawing.value) return;
+
+  isDrawing.value = false;
+  if (ctx) {
+    ctx.beginPath();
+  }
+};
+
+const resetCanvas = () => {
+  if (selectedImage.value) {
+    setupCanvas();
+  }
+};
+
 const clearImage = () => {
   selectedImage.value = null;
+  ctx = null;
 };
 
 const startRepair = () => {
@@ -203,5 +306,25 @@ const startRepair = () => {
 
 .q-header {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.canvas-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.drawing-canvas {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 4px;
+  cursor: crosshair;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.drawing-canvas:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 </style>
