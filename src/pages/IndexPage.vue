@@ -1,31 +1,6 @@
 <template>
   <q-page>
-    <!-- 頂部導航欄 -->
-    <q-header elevated class="bg-primary text-white">
-      <q-toolbar>
-        <!-- 網站名稱 -->
-        <q-toolbar-title class="text-h5 text-weight-bold">
-          PerspectiveFill
-        </q-toolbar-title>
 
-        <!-- 導航菜單 -->
-        <q-tabs v-model="activeTab" class="q-ml-lg">
-          <q-tab name="repair" label="修補" />
-          <q-tab name="history" label="修補紀錄" />
-        </q-tabs>
-
-        <!-- 設定按鈕 -->
-        <q-btn
-          flat
-          round
-          icon="settings"
-          class="q-ml-auto"
-          @click="openSettings"
-        >
-          <q-tooltip>設定</q-tooltip>
-        </q-btn>
-      </q-toolbar>
-    </q-header>
 
     <!-- 主要內容區域 -->
     <div class="q-pa-lg">
@@ -166,7 +141,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import repairResultImg from '../assets/05043726_7787106650-68040068_3739775613_raw_640x480.jpg';
 
 const activeTab = ref('repair');
@@ -181,15 +157,12 @@ const repairSuccess = ref(false);
 
 let ctx: CanvasRenderingContext2D | null = null;
 
+const router = useRouter();
+
 const referenceOptions = [
   { label: '自訂義上傳', value: 'custom' },
   { label: 'Google Places API', value: 'google' }
 ];
-
-const openSettings = () => {
-  // 開啟設定對話框
-  console.log('開啟設定');
-};
 
 const selectImage = () => {
   const input = document.createElement('input');
@@ -323,6 +296,15 @@ const startRepair = () => {
     }
   }, 300);
 };
+
+// 監聽 tab 切換，切換到 history 時跳轉
+watch(activeTab, (val) => {
+  if (val === 'history') {
+    void router.push('/history');
+  } else if (val === 'repair') {
+    void router.push('/');
+  }
+});
 </script>
 
 <style scoped>
