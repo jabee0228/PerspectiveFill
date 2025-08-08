@@ -29,9 +29,9 @@
 
     <!-- 主要內容區域 -->
     <div class="q-pa-lg">
-      <div class="row q-gutter-lg">
+      <div class="row q-gutter-lg flex-nowrap items-stretch">
         <!-- 左側上傳區域 -->
-        <div class="col-12 col-md-4">
+        <div class="col-12 col-md-2">
           <q-card class="upload-card" elevated>
             <q-card-section class="text-center">
               <q-icon name="cloud_upload" size="4rem" color="primary" />
@@ -62,10 +62,27 @@
               </div>
             </q-card-section>
           </q-card>
+          <q-card class="reference-card q-mt-md" elevated>
+            <q-card-section class="text-center">
+              <div class="text-h6 q-mb-md">參考圖選擇</div>
+              <q-select
+                v-model="referenceMode"
+                :options="referenceOptions"
+                label="選擇參考圖來源"
+                outlined
+                dense
+                class="full-width"
+                emit-value
+                map-options
+              />
+            </q-card-section>
+          </q-card>
         </div>
 
+
+
         <!-- 右側預覽和操作區域 -->
-        <div class="col-12 col-md-8">
+        <div class="col-12 col-md-6">
           <q-card elevated>
             <q-card-section>
               <div class="text-h6 q-mb-md">圖片預覽</div>
@@ -85,7 +102,7 @@
               </div>
 
               <!-- 圖片預覽區域 -->
-              <div class="preview-area">
+              <div class="preview-area" style="position: relative;">
                 <div v-if="!selectedImage" class="no-image">
                   <q-icon name="image" size="5rem" color="grey-4" />
                   <div class="text-body1 text-grey-6 q-mt-md">
@@ -93,7 +110,7 @@
                   </div>
                 </div>
 
-                <div v-else class="canvas-container">
+                <div v-else class="canvas-container" style="position: relative;">
                   <canvas
                     ref="canvas"
                     class="drawing-canvas"
@@ -102,6 +119,18 @@
                     @mouseup="stopDrawing"
                     @mouseleave="stopDrawing"
                   />
+                  <!-- 修補中灰色遮罩 -->
+                  <div v-if="isRepairing" style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(80,80,80,0.5);z-index:2;display:flex;align-items:center;justify-content:center;">
+                    <div style="width:80%;position:absolute;bottom:24px;left:10%;">
+                      <q-linear-progress :value="repairProgress/100" color="primary" track-color="grey-4" rounded size="20px" />
+                    </div>
+                  </div>
+                  <!-- 修補成功提示 -->
+                  <transition name="fade-success">
+                    <div v-if="repairSuccess" class="repair-success-mask">
+                      <div class="bg-white text-primary text-h5 q-pa-xl q-mb-xl repair-success-tip">修補成功！</div>
+                    </div>
+                  </transition>
                 </div>
               </div>
             </q-card-section>
@@ -138,14 +167,24 @@
 
 <script setup lang="ts">
 import { ref, nextTick } from 'vue';
+import repairResultImg from '../assets/05043726_7787106650-68040068_3739775613_raw_640x480.jpg';
 
 const activeTab = ref('repair');
 const selectedImage = ref<string | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 const isDrawing = ref(false);
 const brushSize = ref(20);
+const referenceMode = ref('custom');
+const isRepairing = ref(false);
+const repairProgress = ref(0);
+const repairSuccess = ref(false);
 
 let ctx: CanvasRenderingContext2D | null = null;
+
+const referenceOptions = [
+  { label: '自訂義上傳', value: 'custom' },
+  { label: 'Google Places API', value: 'google' }
+];
 
 const openSettings = () => {
   // 開啟設定對話框
@@ -162,7 +201,7 @@ const selectImage = () => {
       const reader = new FileReader();
       reader.onload = (e) => {
         selectedImage.value = e.target?.result as string;
-        nextTick(() => {
+        void nextTick(() => {
           setupCanvas();
         });
       };
@@ -176,11 +215,11 @@ const handleDrop = (event: DragEvent) => {
   const files = event.dataTransfer?.files;
   if (files && files.length > 0) {
     const file = files[0];
-    if (file.type.startsWith('image/')) {
+    if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = (e) => {
         selectedImage.value = e.target?.result as string;
-        nextTick(() => {
+        void nextTick(() => {
           setupCanvas();
         });
       };
@@ -215,8 +254,9 @@ const startDrawing = (event: MouseEvent) => {
 
   isDrawing.value = true;
 
-  // 設定透明畫筆
-  ctx.globalCompositeOperation = 'destination-out';
+  // 設定紅色畫筆，透明度 0.1，且不會疊加顏色深度
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = 'rgba(255,0,0,0.1)';
   ctx.lineWidth = brushSize.value;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -261,8 +301,27 @@ const clearImage = () => {
 };
 
 const startRepair = () => {
-  // 開始圖片修補處理
-  console.log('開始修補圖片');
+  isRepairing.value = true;
+  repairSuccess.value = false;
+  repairProgress.value = 0;
+
+  const interval = setInterval(() => {
+    if (repairProgress.value < 100) {
+      repairProgress.value += 2;
+    } else {
+      clearInterval(interval);
+      repairSuccess.value = true;
+      isRepairing.value = false;
+      selectedImage.value = repairResultImg;
+      void nextTick(() => {
+        setupCanvas();
+      });
+      // 2秒後淡出修補成功提示
+      setTimeout(() => {
+        repairSuccess.value = false;
+      }, 2000);
+    }
+  }, 300);
 };
 </script>
 
@@ -326,5 +385,24 @@ const startRepair = () => {
 
 .drawing-canvas:hover {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.repair-success-mask {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(80,80,80,0.3);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fade-success-leave-active {
+  transition: opacity 1s;
+}
+.fade-success-leave-to {
+  opacity: 0;
+}
+.fade-success-leave-from {
+  opacity: 1;
 }
 </style>
