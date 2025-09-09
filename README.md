@@ -13,10 +13,8 @@ This repository contains the official source code for the paper: "A Study of Ima
 2.  [Key Features](#key-features)
 3.  [Methodology](#methodology)
 4.  [Dataset](#dataset)
-5.  [Usage](#usage)
-6.  [Results](#results)
-7.  [Citation](#citation)
-8.  [Acknowledgement](#acknowledgement)
+5.  [Results](#results)
+
 
 ---
 
@@ -57,3 +55,15 @@ The coarsely synthesized image from Stage 1 is fed into a modified inpainting mo
 ## Dataset
 
 We used the **Image Matching Challenge 2022** dataset from Google Research. This dataset is ideal as it contains images of various scenes, such as the British Museum, captured from multiple viewpoints, which is essential for our reference-based approach.
+
+
+## Results
+Our proposed method demonstrates significant improvements over baseline models, especially in faithfully reconstructing missing objects.
+
+Quantitative Results:
+
+Our method achieves superior performance across PSNR, SSIM, and LPIPS metrics.
+
+Our HiFill-based model achieved a PSNR of 33.1101, a 2.93% improvement over the same model trained without our preprocessed input.
+
+Our LDM-based model achieved a PSNR of 27.9391, showing a 1.93% improvement over its baseline counterpart.
