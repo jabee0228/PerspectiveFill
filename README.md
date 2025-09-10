@@ -4,7 +4,7 @@ This repository contains the official source code for the paper: "A Study of Ima
 
 **Authors:** En Chen (陳恩), Yi-Hsin Chiang(姜義新), 'Chih-Chang Yu (余執彰), Hsu-Yung Cheng(鄭旭詠)
 
-[![CVGIP 2025](https://img.shields.io/badge/CVGIP-2025-blue.svg)](https://www.cvgip.org.tw/2025/)
+[![CVGIP 2025](https://img.shields.io/badge/CVGIP-2025-blue.svg)](https://ippr.org.tw/cvgip/cvgip_previousinformation/)
 
 ---
 
