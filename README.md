@@ -1,6 +1,6 @@
 # A Study of Image Inpainting Methods via Various Perspective Image Synthesis
 
-This repository contains the official source code for the paper: "A Study of Image Inpainting Methods via Various Perspective Image Synthesis Using CNN-based and Diffusion-based Models," presented at CVGIP 2025.
+This repository contains the official source code for the paper: "A Study of Image Inpainting Methods via Various Perspective Image Synthesis Using CNN-based and Diffusion-based Models" presented at CVGIP 2025.
 
 **Authors:** En Chen (陳恩), Yi-Hsin Chiang(姜義新), Chih-Chang Yu (余執彰), Hsu-Yung Cheng(鄭旭詠)
 
