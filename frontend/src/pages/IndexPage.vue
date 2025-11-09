@@ -37,19 +37,38 @@
               </div>
             </q-card-section>
           </q-card>
+
+          <!-- 參考圖上傳區域 -->
           <q-card class="reference-card q-mt-md" elevated>
             <q-card-section class="text-center">
-              <div class="text-h6 q-mb-md">參考圖選擇</div>
-              <q-select
-                v-model="referenceMode"
-                :options="referenceOptions"
-                label="選擇參考圖來源"
-                outlined
-                dense
-                class="full-width"
-                emit-value
-                map-options
+              <div class="text-h6 q-mb-sm">參考圖上傳</div>
+              <div class="text-caption text-grey-6 q-mb-md">
+                僅使用自訂義參考圖
+              </div>
+
+              <q-btn
+                color="primary"
+                icon="image_search"
+                label="選擇參考圖"
+                size="md"
+                @click="selectReferenceImage"
               />
+
+              <div
+                class="drag-area q-mt-md q-pa-md"
+                @dragover.prevent
+                @drop.prevent="handleRefDrop"
+              >
+                <q-icon name="file_upload" size="1.8rem" color="grey-5" />
+                <div class="text-body2 text-grey-6 q-mt-sm">
+                  或拖拽參考圖到此處
+                </div>
+              </div>
+
+              <div v-if="referenceImage" class="q-mt-md">
+                <q-img :src="referenceImage" ratio="1" class="ref-preview" :img-style="{ objectFit: 'cover' }" />
+                <q-btn flat color="negative" icon="clear" label="清除參考圖" class="q-mt-sm" @click="referenceImage = null" />
+              </div>
             </q-card-section>
           </q-card>
         </div>
@@ -147,10 +166,10 @@ import repairResultImg from '../assets/05043726_7787106650-68040068_3739775613_r
 
 const activeTab = ref('repair');
 const selectedImage = ref<string | null>(null);
+const referenceImage = ref<string | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
 const isDrawing = ref(false);
 const brushSize = ref(20);
-const referenceMode = ref('custom');
 const isRepairing = ref(false);
 const repairProgress = ref(0);
 const repairSuccess = ref(false);
@@ -158,11 +177,6 @@ const repairSuccess = ref(false);
 let ctx: CanvasRenderingContext2D | null = null;
 
 const router = useRouter();
-
-const referenceOptions = [
-  { label: '自訂義上傳', value: 'custom' },
-  { label: 'Google Places API', value: 'google' }
-];
 
 const selectImage = () => {
   const input = document.createElement('input');
@@ -195,6 +209,38 @@ const handleDrop = (event: DragEvent) => {
         void nextTick(() => {
           setupCanvas();
         });
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+};
+
+// 新增：選擇/拖拽 參考圖
+const selectReferenceImage = () => {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.onchange = (event) => {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        referenceImage.value = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+  input.click();
+};
+
+const handleRefDrop = (event: DragEvent) => {
+  const files = event.dataTransfer?.files;
+  if (files && files.length > 0) {
+    const file = files[0];
+    if (file && file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        referenceImage.value = e.target?.result as string;
       };
       reader.readAsDataURL(file);
     }
@@ -386,5 +432,13 @@ watch(activeTab, (val) => {
 }
 .fade-success-leave-from {
   opacity: 1;
+}
+
+/* 參考圖預覽尺寸 */
+.ref-preview {
+  width: 100%;
+  max-width: 220px;
+  border-radius: 8px;
+  margin: 0 auto;
 }
 </style>
