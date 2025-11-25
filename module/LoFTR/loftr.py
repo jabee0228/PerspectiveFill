@@ -9,6 +9,17 @@ from .src.loftr import LoFTR, default_cfg
 import os
 import random
 
+def build_loftr_model(image_type='outdoor'):
+    matcher = LoFTR(config=default_cfg)
+
+    if image_type == 'indoor':
+        matcher.load_state_dict(torch.load("./module/LoFTR/weights/indoor_ds.ckpt")['state_dict'])
+    elif image_type == 'outdoor':
+        matcher.load_state_dict(torch.load("./module/LoFTR/weights/outdoor_ds.ckpt")['state_dict'])
+    else:
+        raise ValueError("Wrong image_type is given.")
+
+    return matcher
 
 
 def loftrGenerate(matcher, img0_pth, img1_pth, mask_pth):
