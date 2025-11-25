@@ -9,55 +9,55 @@ from .src.loftr import LoFTR, default_cfg
 import os
 import random
 
-def loftrGenerate(img0_pth, img1_pth, blocksXY):
-    image_pair = [img0_pth, img1_pth]
+def build_loftr_model(image_type='outdoor'):
     matcher = LoFTR(config=default_cfg)
 
-    image_type = 'outdoor'
     if image_type == 'indoor':
-      matcher.load_state_dict(torch.load("/weights/indoor_ds.ckpt")['state_dict'])
+        matcher.load_state_dict(torch.load("./module/LoFTR/weights/indoor_ds.ckpt")['state_dict'])
     elif image_type == 'outdoor':
-      matcher.load_state_dict(torch.load("./module/LoFTR/weights/outdoor_ds.ckpt")['state_dict'])
+        matcher.load_state_dict(torch.load("./module/LoFTR/weights/outdoor_ds.ckpt")['state_dict'])
     else:
-      raise ValueError("Wrong image_type is given.")
+        raise ValueError("Wrong image_type is given.")
+
+    return matcher
 
 
-    #matcher = matcher.eval().cuda()
+def loftrGenerate(matcher, img0_pth, img1_pth, mask_pth):
+    img0_pth = [img0_pth, img1_pth]
+    # matcher = LoFTR(config=default_cfg)
+
+
     matcher = matcher.eval()
-    img0_origin = cv2.imread(image_pair[0])
-    img1_origin = cv2.imread(image_pair[1])
+    img0_origin = cv2.imread(img0_pth)
+    img1_origin = cv2.imread(img1_pth)
     img0_origin = cv2.resize(img0_origin, (640, 480))
     img1_origin = cv2.resize(img1_origin, (640, 480))
 
-    '''
-        tmp_pth = "/storage/LoFTR/results/originSet/"+dirName
-    if not os.path.exists(tmp_pth+returnBaseName(img0_pth)):
-        os.makedirs(tmp_pth, exist_ok=True)
-        cv2.imwrite(tmp_pth+"/"+returnBaseName(img0_pth), img0_origin) # store resized origin_img0
 
-    '''
-
-
-    img0_raw = cv2.imread(image_pair[0], cv2.IMREAD_GRAYSCALE)
-    img1_raw = cv2.imread(image_pair[1], cv2.IMREAD_GRAYSCALE)
+    img0_raw = cv2.imread(img0_pth, cv2.IMREAD_GRAYSCALE)
+    img1_raw = cv2.imread(img1_pth, cv2.IMREAD_GRAYSCALE)
     img0_raw = cv2.resize(img0_raw, (640, 480))
     img1_raw = cv2.resize(img1_raw, (640, 480))
 
     img0 = torch.from_numpy(img0_raw)[None][None] / 255.
     img1 = torch.from_numpy(img1_raw)[None][None] / 255.
+
+    mask = cv2.imread(mask_pth, cv2.IMREAD_GRAYSCALE)
+    mask = cv2.resize(mask, (640, 480))
+    
+    mask = torch.from_numpy(mask)[None][None] / 255.
+    mask[mask < 0.5] = 0
+    mask[mask >= 0.5] = 1
+    img0 = (1 - mask) * img0
     batch = {'image0': img0, 'image1': img1}
 
-    # Inference with LoFTR and get prediction
+
+    # Inference with LoFTR and get matching points
     with torch.no_grad():
         matcher(batch)
         mkpts0 = batch['mkpts0_f'].cpu().numpy()
         mkpts1 = batch['mkpts1_f'].cpu().numpy()
         mconf = batch['mconf'].cpu().numpy()
-
-    # blocksXY = block_region(mkpts0)
-    # blocksXY = generate_random_rectangle(640, 480)
-    if (blocksXY == None):
-        return
     
     newName = combine_filenames(returnBaseName(img0_pth), returnBaseName(img1_pth))
     # addWhiteBlock(bloackregion[0],bloackregion[1],bloackregion[2],bloackregion[3],"image0","whiteBlock")
@@ -67,35 +67,25 @@ def loftrGenerate(img0_pth, img1_pth, blocksXY):
 
     result_img0 = img0_origin.copy()
     target_image1 = img1_origin
-    result_img0 = cv2.rectangle(result_img0, (blocksXY[0], blocksXY[1]), (blocksXY[2], blocksXY[3]), (255, 255, 255), -1)
-    for dst_y in range(blocksXY[1], blocksXY[3]):
-        for dst_x in range(blocksXY[0], blocksXY[2]):
-            coordinate = np.array([[dst_x], [dst_y], [1]])
-            trans_coordinate = np.dot(H, coordinate)
-            # 齊次座標轉二維
-            trans_coordinate = trans_coordinate / trans_coordinate[2]
-            src_x, src_y = int(trans_coordinate[0]), int(trans_coordinate[1])
-            if ((src_x > 639 or src_x < 0) or (src_y > 479 or src_y < 0)):
+    for dst_y in range(480):
+        for dst_x in range(640):
+            if mask[dst_y, dst_x] != 0:
+                coordinate = np.array([[dst_x], [dst_y], [1]])
+                trans_coordinate = np.dot(H, coordinate)
+                # 齊次座標轉二維
+                trans_coordinate = trans_coordinate / trans_coordinate[2]
+                src_x, src_y = int(trans_coordinate[0]), int(trans_coordinate[1])
+                if ((src_x > 639 or src_x < 0) or (src_y > 479 or src_y < 0)):
+                    continue
+                elif ((dst_x > 639 or dst_x < 0) or (dst_y > 479 or dst_y < 0)):
+                    continue
+                result_img0[dst_y, dst_x] = target_image1[src_y, src_x] # write pixel
+            else: # not target region
                 continue
-            elif ((dst_x > 639 or dst_x < 0) or (dst_y > 479 or dst_y < 0)):
-                continue
-            result_img0[dst_y, dst_x] = target_image1[src_y, src_x] # write pixel
-
-    if not os.path.exists("images060501/origin/"):
-        os.makedirs("images060501/origin/", exist_ok=True)
-    
-    cv2.imwrite("images060501/origin/"+newName, img0_origin)
-
-    if not os.path.exists("images060501/fixed/"):
-        os.makedirs("images060501/fixed/", exist_ok=True)
-    filename = "images060501/fixed/"+ newName
-        # Save the image using OpenCV's imwrite function
+    newName = "fixed.jpg"
+    filename = f"./uploads/{newName}"
+    # Save the image using OpenCV's imwrite function
     cv2.imwrite(filename, result_img0)
-    filename = "images060501/masks/"
-    if not os.path.exists("images060501/masks/"):
-        os.makedirs("images060501/masks/", exist_ok=True)
-    filename += newName
-    makeBlackImg(blocksXY[0],blocksXY[1],blocksXY[2],blocksXY[3], filename)
 
     return newName
 
