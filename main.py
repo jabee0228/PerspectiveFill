@@ -4,6 +4,10 @@ from typing import List
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
+from module.LoFTR.loftr import loftrGenerate
+from module.LoFTR.loftr import build_loftr_model
+
+matcher = build_loftr_model()
 
 app = FastAPI()
 
@@ -55,6 +59,7 @@ async def process_images(
 
     # 回傳任一張或簡單訊息，這裡維持原本回傳 mask 的行為
     content_type = mask.content_type or "image/jpeg"
+    loftrGenerate(matcher, original_path, ref_path, mask_path)
     return Response(content=mask_bytes, media_type=content_type)
 
 
