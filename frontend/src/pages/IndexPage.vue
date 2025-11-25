@@ -104,7 +104,9 @@
                   </div>
                 </div>
 
+                <!-- 主圖顯示 -->
                 <div v-else class="canvas-container" style="position: relative;">
+                  <!-- 顯示影像與半透明紅色筆畫的主畫布 -->
                   <canvas
                     ref="canvas"
                     class="drawing-canvas"
@@ -113,16 +115,29 @@
                     @mouseup="stopDrawing"
                     @mouseleave="stopDrawing"
                   />
+
                   <!-- 修補中灰色遮罩 -->
-                  <div v-if="isRepairing" style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(80,80,80,0.5);z-index:2;display:flex;align-items:center;justify-content:center;">
+                  <div
+                    v-if="isRepairing"
+                    style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(80,80,80,0.5);z-index:2;display:flex;align-items:center;justify-content:center;"
+                  >
                     <div style="width:80%;position:absolute;bottom:24px;left:10%;">
-                      <q-linear-progress :value="repairProgress/100" color="primary" track-color="grey-4" rounded size="20px" />
+                      <q-linear-progress
+                        :value="repairProgress/100"
+                        color="primary"
+                        track-color="grey-4"
+                        rounded
+                        size="20px"
+                      />
                     </div>
                   </div>
+
                   <!-- 修補成功提示 -->
                   <transition name="fade-success">
                     <div v-if="repairSuccess" class="repair-success-mask">
-                      <div class="bg-white text-primary text-h5 q-pa-xl q-mb-xl repair-success-tip">修補成功！</div>
+                      <div class="bg-white text-primary text-h5 q-pa-xl q-mb-xl repair-success-tip">
+                        修補成功！
+                      </div>
                     </div>
                   </transition>
                 </div>
@@ -162,19 +177,21 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import repairResultImg from '../assets/05043726_7787106650-68040068_3739775613_raw_640x480.jpg';
 
 const activeTab = ref('repair');
 const selectedImage = ref<string | null>(null);
 const referenceImage = ref<string | null>(null);
 const canvas = ref<HTMLCanvasElement | null>(null);
+const maskCanvas = ref<HTMLCanvasElement | null>(null);
+
 const isDrawing = ref(false);
 const brushSize = ref(20);
 const isRepairing = ref(false);
 const repairProgress = ref(0);
 const repairSuccess = ref(false);
 
-let ctx: CanvasRenderingContext2D | null = null;
+let ctx: CanvasRenderingContext2D | null = null; // 顯示畫布 context
+let maskCtx: CanvasRenderingContext2D | null = null; // mask 畫布 context
 
 const router = useRouter();
 
@@ -247,64 +264,108 @@ const handleRefDrop = (event: DragEvent) => {
   }
 };
 
+// 初始化主畫布與 mask 畫布（同解析度）
 const setupCanvas = () => {
   if (!canvas.value || !selectedImage.value) return;
 
   const img = new Image();
   img.onload = () => {
     const canvasEl = canvas.value!;
-    ctx = canvasEl.getContext('2d')!;
+    ctx = canvasEl.getContext('2d');
+    if (!ctx) return;
 
-    // 設定 canvas 尺寸
     const containerWidth = canvasEl.parentElement!.clientWidth;
     const scale = Math.min(containerWidth / img.width, 400 / img.height);
 
-    canvasEl.width = img.width * scale;
-    canvasEl.height = img.height * scale;
+    const targetWidth = img.width * scale;
+    const targetHeight = img.height * scale;
 
-    // 繪製圖片
-    ctx.drawImage(img, 0, 0, canvasEl.width, canvasEl.height);
+    canvasEl.width = targetWidth;
+    canvasEl.height = targetHeight;
+
+    // 建立 / 重設 mask 畫布（同解析度）
+    if (!maskCanvas.value) {
+      maskCanvas.value = document.createElement('canvas');
+    }
+    const mCanvas = maskCanvas.value;
+    mCanvas.width = targetWidth;
+    mCanvas.height = targetHeight;
+    maskCtx = mCanvas.getContext('2d');
+    if (maskCtx) {
+      // 初始為全黑（無筆畫）
+      maskCtx.fillStyle = 'black';
+      maskCtx.fillRect(0, 0, targetWidth, targetHeight);
+    }
+
+    // 畫原圖到底層
+    ctx.clearRect(0, 0, targetWidth, targetHeight);
+    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
   };
   img.src = selectedImage.value;
 };
 
+// 回傳目前 mask 圖（同解析度）的 DataURL，可給後端使用
+const getMaskDataUrl = () => {
+  if (!maskCanvas.value) return null;
+  return maskCanvas.value.toDataURL('image/png');
+};
+
+// 取得滑鼠在畫布上的位置
+const getCanvasPos = (event: MouseEvent) => {
+  const rect = canvas.value!.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  return { x, y };
+};
+
 const startDrawing = (event: MouseEvent) => {
-  if (!ctx) return;
+  if (!ctx || !maskCtx || !canvas.value) return;
 
   isDrawing.value = true;
 
-  // 設定紅色畫筆，透明度 0.1，且不會疊加顏色深度
+  const { x, y } = getCanvasPos(event);
+
+  // 顯示畫布：半透明紅色 50%
   ctx.globalCompositeOperation = 'source-over';
-  ctx.strokeStyle = 'rgba(255,0,0,0.1)';
+  ctx.strokeStyle = 'rgba(255,0,0,0.5)';
   ctx.lineWidth = brushSize.value;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-
-  const rect = canvas.value!.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
-
   ctx.beginPath();
   ctx.moveTo(x, y);
+
+  // mask 畫布：白色（不透明）
+  maskCtx.globalCompositeOperation = 'source-over';
+  maskCtx.strokeStyle = 'white';
+  maskCtx.lineWidth = brushSize.value;
+  maskCtx.lineCap = 'round';
+  maskCtx.lineJoin = 'round';
+  maskCtx.beginPath();
+  maskCtx.moveTo(x, y);
 };
 
 const draw = (event: MouseEvent) => {
-  if (!isDrawing.value || !ctx) return;
+  if (!isDrawing.value || !ctx || !maskCtx || !canvas.value) return;
 
-  const rect = canvas.value!.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
+  const { x, y } = getCanvasPos(event);
 
   ctx.lineTo(x, y);
   ctx.stroke();
+
+  maskCtx.lineTo(x, y);
+  maskCtx.stroke();
 };
 
 const stopDrawing = () => {
   if (!isDrawing.value) return;
 
   isDrawing.value = false;
+
   if (ctx) {
     ctx.beginPath();
+  }
+  if (maskCtx) {
+    maskCtx.beginPath();
   }
 };
 
@@ -317,30 +378,103 @@ const resetCanvas = () => {
 const clearImage = () => {
   selectedImage.value = null;
   ctx = null;
+  maskCtx = null;
+  maskCanvas.value = null;
 };
 
-const startRepair = () => {
+// 將 dataURL 轉成 File 物件，方便用 FormData 上傳
+// 修正 undefined 可能性：加入嚴格檢查並確保 mime 一定是 string
+const dataURLToFile = (dataUrl: string, filename: string): File => {
+  const parts = dataUrl.split(',');
+  const meta = parts[0];
+  const base64 = parts[1];
+  if (!meta || !base64) {
+    throw new Error('Invalid data URL format');
+  }
+  const mimeMatch = meta.match(/:(.*?);/);
+  const mime: string = mimeMatch?.[1] ?? 'image/png';
+  const bstr = atob(base64);
+  const len = bstr.length;
+  const u8arr = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    u8arr[i] = bstr.charCodeAt(i);
+  }
+  return new File([u8arr], filename, { type: mime });
+};
+
+// 將目前選擇的圖片 (dataURL or URL) 取回成 Blob，用於組 FormData
+const urlOrDataUrlToFile = async (src: string, filename: string) => {
+  // 若已經是 dataURL，直接用上面的工具轉
+  if (src.startsWith('data:')) {
+    return dataURLToFile(src, filename);
+  }
+  // 若是一般 URL（例如後端回傳或 public 資源），先 fetch 再轉成 File
+  const res = await fetch(src);
+  const blob = await res.blob();
+  return new File([blob], filename, { type: blob.type || 'image/jpeg' });
+};
+
+// 與後端串接的真正修補流程
+const startRepair = async () => {
+  if (!selectedImage.value || !referenceImage.value) {
+    console.warn('缺少原圖或參考圖，無法送後端');
+    return;
+  }
+
+  const maskDataUrl = getMaskDataUrl();
+  if (!maskDataUrl) {
+    console.warn('mask 尚未建立，無法送後端');
+    return;
+  }
+
   isRepairing.value = true;
   repairSuccess.value = false;
   repairProgress.value = 0;
 
-  const interval = setInterval(() => {
-    if (repairProgress.value < 100) {
-      repairProgress.value += 2;
-    } else {
-      clearInterval(interval);
-      repairSuccess.value = true;
-      isRepairing.value = false;
-      selectedImage.value = repairResultImg;
-      void nextTick(() => {
-        setupCanvas();
-      });
-      // 2秒後淡出修補成功提示
-      setTimeout(() => {
-        repairSuccess.value = false;
-      }, 2000);
+  try {
+    // 1. 準備 FormData
+    const formData = new FormData();
+
+    const originalFile = await urlOrDataUrlToFile(selectedImage.value, 'original.png');
+    const refFile = await urlOrDataUrlToFile(referenceImage.value, 'ref.png');
+    const maskFile = dataURLToFile(maskDataUrl, 'mask.png');
+
+    formData.append('original', originalFile);
+    formData.append('ref', refFile);
+    formData.append('mask', maskFile);
+
+    // 2. 呼叫後端 API
+    const response = await fetch('http://localhost:8000/process', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`後端回傳錯誤狀態碼: ${response.status}`);
     }
-  }, 300);
+
+    // 3. 取得後端回傳的圖片（假設直接回傳圖片檔）
+    const blob = await response.blob();
+    const resultUrl = URL.createObjectURL(blob);
+
+    // 將預覽圖換成後端結果
+    selectedImage.value = resultUrl;
+
+    // 更新畫布顯示
+    await nextTick();
+    setupCanvas();
+
+    // 顯示成功訊息（可依喜好調整）
+    repairProgress.value = 100;
+    repairSuccess.value = true;
+    setTimeout(() => {
+      repairSuccess.value = false;
+    }, 2000);
+  } catch (err) {
+    console.error('修補過程發生錯誤: ', err);
+  } finally {
+    isRepairing.value = false;
+  }
 };
 
 // 監聽 tab 切換，切換到 history 時跳轉
@@ -417,8 +551,11 @@ watch(activeTab, (val) => {
 
 .repair-success-mask {
   position: absolute;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: rgba(80,80,80,0.3);
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(80, 80, 80, 0.3);
   z-index: 3;
   display: flex;
   align-items: center;
