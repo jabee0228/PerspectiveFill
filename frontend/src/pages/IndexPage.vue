@@ -444,7 +444,7 @@ const startRepair = async () => {
     formData.append('mask', maskFile);
 
     // 2. 呼叫後端 API
-    const response = await fetch('http://localhost:8000/process', {
+    let response = await fetch('http://localhost:8000/process', {
       method: 'POST',
       body: formData,
     });
@@ -452,6 +452,12 @@ const startRepair = async () => {
     if (!response.ok) {
       throw new Error(`後端回傳錯誤狀態碼: ${response.status}`);
     }
+
+    // 加入呼叫 Diffusion api
+    response = await fetch('http://localhost:8888/inpaint', {
+      method: 'POST',
+      body: formData,
+    });
 
     // 3. 取得後端回傳的圖片（假設直接回傳圖片檔）
     const blob = await response.blob();

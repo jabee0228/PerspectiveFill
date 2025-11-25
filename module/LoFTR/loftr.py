@@ -23,9 +23,7 @@ def build_loftr_model(image_type='outdoor'):
 
 
 def loftrGenerate(matcher, img0_pth, img1_pth, mask_pth):
-    img0_pth = [img0_pth, img1_pth]
     # matcher = LoFTR(config=default_cfg)
-
 
     matcher = matcher.eval()
     img0_origin = cv2.imread(img0_pth)
@@ -44,10 +42,11 @@ def loftrGenerate(matcher, img0_pth, img1_pth, mask_pth):
 
     mask = cv2.imread(mask_pth, cv2.IMREAD_GRAYSCALE)
     mask = cv2.resize(mask, (640, 480))
-    
+    # 將 mask 二值化：<0.5 -> 0, >=0.5 -> 1
     mask = torch.from_numpy(mask)[None][None] / 255.
     mask[mask < 0.5] = 0
     mask[mask >= 0.5] = 1
+    # 將需要覆蓋的區域清空（設為 0），供後續匹配
     img0 = (1 - mask) * img0
     batch = {'image0': img0, 'image1': img1}
 
@@ -60,8 +59,6 @@ def loftrGenerate(matcher, img0_pth, img1_pth, mask_pth):
         mconf = batch['mconf'].cpu().numpy()
     
     newName = combine_filenames(returnBaseName(img0_pth), returnBaseName(img1_pth))
-    # addWhiteBlock(bloackregion[0],bloackregion[1],bloackregion[2],bloackregion[3],"image0","whiteBlock")
-
 
     H, status = cv2.findHomography(mkpts0, mkpts1, cv2.RANSAC)
 
@@ -69,7 +66,7 @@ def loftrGenerate(matcher, img0_pth, img1_pth, mask_pth):
     target_image1 = img1_origin
     for dst_y in range(480):
         for dst_x in range(640):
-            if mask[dst_y, dst_x] != 0:
+            if mask[0, 0, dst_y, dst_x] != 0:
                 coordinate = np.array([[dst_x], [dst_y], [1]])
                 trans_coordinate = np.dot(H, coordinate)
                 # 齊次座標轉二維
@@ -79,15 +76,18 @@ def loftrGenerate(matcher, img0_pth, img1_pth, mask_pth):
                     continue
                 elif ((dst_x > 639 or dst_x < 0) or (dst_y > 479 or dst_y < 0)):
                     continue
-                result_img0[dst_y, dst_x] = target_image1[src_y, src_x] # write pixel
-            else: # not target region
+                result_img0[dst_y, dst_x] = target_image1[src_y, src_x]  # write pixel
+            else:  # not target region
                 continue
-    newName = "fixed.jpg"
-    filename = f"./uploads/{newName}"
-    # Save the image using OpenCV's imwrite function
+    # 仍保留檔案寫出供除錯使用
+    filename = f"./uploads/fixed.jpg"
     cv2.imwrite(filename, result_img0)
 
-    return newName
+    # 將結果影像編碼為 JPEG bytes 回傳
+    success, encoded = cv2.imencode('.jpg', result_img0)
+    if not success:
+        raise RuntimeError('Failed to encode image to JPEG bytes.')
+    return encoded.tobytes()
 
 
 def loftrGenerate_area(img0_pth, img1_pth, blocksXY):
@@ -108,14 +108,6 @@ def loftrGenerate_area(img0_pth, img1_pth, blocksXY):
     img1_origin = cv2.imread(image_pair[1])
     img0_origin = cv2.resize(img0_origin, (640, 480))
     img1_origin = cv2.resize(img1_origin, (640, 480))
-
-    '''
-        tmp_pth = "/storage/LoFTR/results/originSet/"+dirName
-    if not os.path.exists(tmp_pth+returnBaseName(img0_pth)):
-        os.makedirs(tmp_pth, exist_ok=True)
-        cv2.imwrite(tmp_pth+"/"+returnBaseName(img0_pth), img0_origin) # store resized origin_img0
-
-    '''
 
     img0_raw = cv2.imread(image_pair[0], cv2.IMREAD_GRAYSCALE)
     img1_raw = cv2.imread(image_pair[1], cv2.IMREAD_GRAYSCALE)
@@ -150,7 +142,6 @@ def loftrGenerate_area(img0_pth, img1_pth, blocksXY):
         return
 
     newName = combine_filenames(returnBaseName(img0_pth), returnBaseName(img1_pth))
-    # addWhiteBlock(bloackregion[0],bloackregion[1],bloackregion[2],bloackregion[3],"image0","whiteBlock")
 
     if len(mkpts0_filtered) >= 4:
         H, status = cv2.findHomography(mkpts0_filtered, mkpts1_filtered, cv2.RANSAC)
@@ -188,7 +179,6 @@ def loftrGenerate_area(img0_pth, img1_pth, blocksXY):
     if not os.path.exists("images060802/fixed/"):
         os.makedirs("images060802/fixed/", exist_ok=True)
     filename = "images060802/fixed/" + newName
-    # Save the image using OpenCV's imwrite function
     cv2.imwrite(filename, result_img0)
     filename = "images060802/masks/"
     if not os.path.exists("images060802/masks/"):

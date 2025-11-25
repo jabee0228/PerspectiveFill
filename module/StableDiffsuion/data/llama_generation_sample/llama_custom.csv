@@ -1,0 +1,4 @@
+image_path,mask_path,partition
+scripts\generate_llama_mask\example\output\desk_pc_mouse2_crop000.png,scripts\generate_llama_mask\example\output\desk_pc_mouse2_crop000_mask000.png,train
+scripts\generate_llama_mask\example\output\desk_pc_mouse2_crop001.png,scripts\generate_llama_mask\example\output\desk_pc_mouse2_crop001_mask001.png,train
+scripts\generate_llama_mask\example\output\desk_pc_mouse2_crop002.png,scripts\generate_llama_mask\example\output\desk_pc_mouse2_crop002_mask002.png,train

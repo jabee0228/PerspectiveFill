@@ -1,11 +1,8 @@
 import os
-import time
-from typing import List
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from module.LoFTR.loftr import loftrGenerate
-from module.LoFTR.loftr import build_loftr_model
+from module.LoFTR.loftr import loftrGenerate, build_loftr_model
 
 matcher = build_loftr_model()
 
@@ -29,6 +26,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+INPAINT_SERVICE = os.getenv("INPAINT_SERVICE_URL", "http://localhost:8888/inpaint")
+
 
 @app.post("/process")
 async def process_images(
@@ -36,7 +35,7 @@ async def process_images(
     ref: UploadFile = File(...),
     mask: UploadFile = File(...),
 ):
-    """接收 original / ref / mask 三張圖，儲存成 jpg 檔在專案根目錄的 uploads 資料夾。"""
+    """接收 original / ref / mask 三張圖，儲存成 jpg 檔在專案根目錄的 uploads 資料夾，回傳處理結果影像。"""
     # 讀取三個檔案內容
     original_bytes: bytes = await original.read()
     ref_bytes: bytes = await ref.read()
@@ -57,15 +56,27 @@ async def process_images(
     with open(mask_path, "wb") as f:
         f.write(mask_bytes)
 
-    # 回傳任一張或簡單訊息，這裡維持原本回傳 mask 的行為
-    content_type = mask.content_type or "image/jpeg"
-    loftrGenerate(matcher, original_path, ref_path, mask_path)
-    return Response(content=mask_bytes, media_type=content_type)
+    # 可選：先進行 LoFTR 對齊（若需要）
+    loftr_bytes = loftrGenerate(matcher, original_path, ref_path, mask_path)
+
+    # 呼叫 SD Inpaint 取得結果影像 bytes（使用剛寫入的絕對路徑避免路徑錯誤）
+    # result_bytes = run_inpaint_simple(
+    #     origin_image_path=original_path,
+    #     ref_image_path=ref_path,
+    #     mask_path=mask_path,
+    #     steps=50,
+    #     resize=512,
+    #     white_part=False,
+    #     device='cpu'  # 無 GPU 時使用 CPU；有 GPU 可改為 'cuda:0'
+    # )
+
+    # 回傳處理後影像
+    return Response(content=loftr_bytes, media_type="image/jpeg")
 
 
 @app.get("/")
 async def root():
-    return {"message": "PerspectiveFill backend is running"}
+    return {"message": "PerspectiveFill main service running"}
 
 
 # 若直接以 python main.py 執行，啟動 uvicorn 伺服器
